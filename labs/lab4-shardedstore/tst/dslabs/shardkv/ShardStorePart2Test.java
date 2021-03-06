@@ -270,8 +270,9 @@ public class ShardStorePart2Test extends ShardStoreBaseTest {
         multiClientMultiGroupSearch();
     }
 
-    private void randomSearch(int numServersPerGroup) {
-        setupStates(2, numServersPerGroup, 1, 2);
+    private void randomSearch(int numServersPerGroup, boolean differentKeys) {
+        int numShards = 2;
+        setupStates(2, numServersPerGroup, 1, numShards);
 
         Workload ccWorkload = Workload.builder().commands(
                 new Join(1, servers(1, numServersPerGroup)),
@@ -280,14 +281,24 @@ public class ShardStorePart2Test extends ShardStoreBaseTest {
                                       .build();
         initSearchState.addClientWorker(CCA, ccWorkload);
 
-        initSearchState.addClientWorker(client(1),
-                TransactionalKVStoreWorkload.builder().commands(
-                        multiPut("foo-1", "X", "foo-2", "Y"))
-                                            .results(multiPutOk()).build());
+        if (differentKeys) {
+            initSearchState.addClientWorker(client(1),
+                    TransactionalKVStoreWorkload
+                            .differentKeysInfiniteWorkload(numShards));
 
-        initSearchState.addClientWorker(client(2),
-                TransactionalKVStoreWorkload.builder().commands(
-                        multiGet("foo-1", "foo-2")).build());
+            initSearchState.addClientWorker(client(2),
+                    TransactionalKVStoreWorkload
+                            .differentKeysInfiniteWorkload(numShards));
+        } else {
+            initSearchState.addClientWorker(client(1),
+                    TransactionalKVStoreWorkload.builder().commands(
+                            multiPut("foo-1", "X", "foo-2", "Y"))
+                                                .results(multiPutOk()).build());
+
+            initSearchState.addClientWorker(client(2),
+                    TransactionalKVStoreWorkload.builder().commands(
+                            multiGet("foo-1", "foo-2")).build());
+        }
 
         searchSettings.maxDepth(1000).maxTimeSecs(20).addInvariant(
                 statePredicate("MultiGet returns correct results", s -> {
@@ -315,7 +326,7 @@ public class ShardStorePart2Test extends ShardStoreBaseTest {
     @Category(SearchTests.class)
     @TestPointValue(20)
     public void test11SingleServerRandomSearch() {
-        randomSearch(1);
+        randomSearch(1, /*differentKeys=*/false);
     }
 
     @Test
@@ -323,6 +334,22 @@ public class ShardStorePart2Test extends ShardStoreBaseTest {
     @Category(SearchTests.class)
     @TestPointValue(20)
     public void test12MultiServerRandomSearch() {
-        randomSearch(3);
+        randomSearch(3, /*differentKeys=*/false);
+    }
+
+    @Test
+    @PrettyTestName("One server per group random search, different keys")
+    @Category(SearchTests.class)
+    @TestPointValue(20)
+    public void test13RepeatedPutsGetsSingleServerRandomSearch() {
+        randomSearch(1, /*differentKeys=*/true);
+    }
+
+    @Test
+    @PrettyTestName("Multiple servers per group random search, different keys")
+    @Category(SearchTests.class)
+    @TestPointValue(20)
+    public void test14RepeatedPutsGetsMultiServerRandomSearch() {
+        randomSearch(3, /*differentKeys=*/true);
     }
 }
